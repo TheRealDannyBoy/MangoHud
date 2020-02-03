@@ -52,6 +52,7 @@ vklayer_files = files(
   'gpu.cpp',
   'notify.cpp',
   'elfhacks.cpp',
+  'dbus.cpp',
 )
 
 opengl_files = files(
@@ -89,6 +90,7 @@ vklayer_mesa_overlay = shared_library(
     libimgui_core_dep, 
     dep_dl,
     dep_pthread,
+    dep_dbus,
     dep_vulkan],
   include_directories : [inc_common, inc_opengl],
   link_args : cc.get_supported_link_arguments(['-Wl,-Bsymbolic-functions', '-Wl,-z,relro']),

@@ -57,10 +57,11 @@
 #include "loaders/loader_nvml.h"
 #include "memory.h"
 #include "notify.h"
+#include "dbus_info.h"
 
 bool open = false;
 string gpuString;
-float offset_x, offset_y, hudSpacing;
+float offset_x, offset_y, hudSpacing, hudTicker = 200;
 int hudFirstRow, hudSecondRow;
 string engineName, engineVersion;
 struct amdGpu amdgpu;
@@ -1275,6 +1276,27 @@ void render_imgui(swapchain_stats& data, struct overlay_params& params, ImVec2& 
                                  NULL, min_time, max_time,
                                  ImVec2(ImGui::GetContentRegionAvailWidth() - params.font_size * 2.2, 50));
          }
+         ImGui::Dummy(ImVec2(0.0f, 20.0f));
+         ImGui::PushFont(font1);
+         ImGui::Text("");
+         ImGui::SameLine(0,0);
+         ImGui::Text("%s", spotify.title);
+         ImGui::GetContentRegionAvailWidth();
+         hudTicker -= 0.1;
+         for (int i = 0; i < spotify.artists.size(); i++){
+            if (i > 1 || spotify.artists[0] != spotify.artists[i]){
+               ImGui::Text("%s", spotify.artists[i]);
+            } else {
+               ImGui::Text("%s", spotify.artists[i]);
+            }
+            ImGui::SameLine(0, 0.0f);
+            if (spotify.artists[i] != spotify.artists[spotify.artists.size() - 1]){
+               ImGui::Text(",");
+            }
+            if (i < spotify.artists.size())
+               ImGui::SameLine(0, 1.0f);
+         }
+         ImGui::PopFont();
          ImGui::PopStyleColor();
       }
       if (params.enabled[OVERLAY_PARAM_ENABLED_frame_timing]){

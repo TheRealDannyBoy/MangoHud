@@ -184,6 +184,7 @@ else
 endif
 
 dep_pthread = cc.find_library('pthread')
+dep_dbus = dependency('dbus-1')
 
 if dep_vulkan.found()
   vulkan_headers = []
