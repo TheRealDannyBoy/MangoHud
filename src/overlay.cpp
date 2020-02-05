@@ -1276,27 +1276,6 @@ void render_imgui(swapchain_stats& data, struct overlay_params& params, ImVec2& 
                                  NULL, min_time, max_time,
                                  ImVec2(ImGui::GetContentRegionAvailWidth() - params.font_size * 2.2, 50));
          }
-         ImGui::Dummy(ImVec2(0.0f, 20.0f));
-         ImGui::PushFont(font1);
-         ImGui::Text("");
-         ImGui::SameLine(0,0);
-         ImGui::Text("%s", spotify.title);
-         ImGui::GetContentRegionAvailWidth();
-         hudTicker -= 0.1;
-         for (int i = 0; i < spotify.artists.size(); i++){
-            if (i > 1 || spotify.artists[0] != spotify.artists[i]){
-               ImGui::Text("%s", spotify.artists[i]);
-            } else {
-               ImGui::Text("%s", spotify.artists[i]);
-            }
-            ImGui::SameLine(0, 0.0f);
-            if (spotify.artists[i] != spotify.artists[spotify.artists.size() - 1]){
-               ImGui::Text(",");
-            }
-            if (i < spotify.artists.size())
-               ImGui::SameLine(0, 1.0f);
-         }
-         ImGui::PopFont();
          ImGui::PopStyleColor();
       }
       if (params.enabled[OVERLAY_PARAM_ENABLED_frame_timing]){
@@ -1305,6 +1284,28 @@ void render_imgui(swapchain_stats& data, struct overlay_params& params, ImVec2& 
          ImGui::Text("%.1f ms", 1000 / data.fps);
          ImGui::PopFont();
       }
+
+      {
+         scoped_lock lk(spotify.mutex);
+         if (spotify.valid) {
+            ImGui::Dummy(ImVec2(0.0f, 20.0f));
+            ImGui::PushFont(data.font1);
+            ImGui::Text("%s", spotify.title.c_str());
+            //ImGui::GetContentRegionAvailWidth();
+            hudTicker -= 0.1;
+            for (size_t i = 0; i < spotify.artists.size(); i++) {
+               ImGui::Text("%s", spotify.artists[i].c_str());
+               ImGui::SameLine(0, 1.0f);
+               if (i < spotify.artists.size() - 1)
+                  ImGui::Text(",");
+               if (i < spotify.artists.size() - 1)
+                  ImGui::SameLine(0, 1.0f);
+            }
+            ImGui::NewLine();
+            ImGui::PopFont();
+         }
+      }
+
       window_size = ImVec2(window_size.x, ImGui::GetCursorPosY() + 10.0f);
       ImGui::End();
    }
@@ -2671,6 +2672,9 @@ static VkResult overlay_CreateInstance(
    pthread_create(&fileChange, NULL, &fileChanged, &instance_data->notifier);
 
    init_cpu_stats(instance_data->params);
+
+   if (instance_data->params.media_player)
+      dbusmgr::dbus_mgr.init();
 
    // Adjust height for DXVK/VKD3D version number
    if (engineName == "DXVK" || engineName == "VKD3D"){

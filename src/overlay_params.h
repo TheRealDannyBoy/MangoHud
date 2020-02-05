@@ -97,6 +97,7 @@ extern "C" {
    OVERLAY_PARAM_CUSTOM(text_color)                  \
    OVERLAY_PARAM_CUSTOM(alpha)                       \
    OVERLAY_PARAM_CUSTOM(log_duration)                \
+   OVERLAY_PARAM_CUSTOM(media_player)                \
    OVERLAY_PARAM_CUSTOM(help)
 
 enum overlay_param_position {
@@ -126,6 +127,7 @@ struct overlay_params {
    bool no_display;
    bool full;
    bool io_read, io_write;
+   bool media_player;
    unsigned width;
    unsigned height;
    int offset_x, offset_y;

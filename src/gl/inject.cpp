@@ -20,6 +20,7 @@
 #include "mesa/util/os_time.h"
 #include "file_utils.h"
 #include "notify.h"
+#include "dbus_info.h"
 
 #include <chrono>
 #include <iomanip>
@@ -86,6 +87,8 @@ void imgui_init()
     init_system_info();
     cfg_inited = true;
     init_cpu_stats(params);
+    if (params.media_player)
+        dbusmgr::dbus_mgr.init();
 }
 
 void imgui_create(void *ctx)

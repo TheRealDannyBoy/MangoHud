@@ -185,6 +185,7 @@ parse_path(const char *str)
 #define parse_font_file(s) parse_path(s)
 #define parse_io_read(s) parse_unsigned(s)
 #define parse_io_write(s) parse_unsigned(s)
+#define parse_media_player(s) parse_unsigned(s)
 
 #define parse_crosshair_color(s) parse_color(s)
 #define parse_cpu_color(s) parse_color(s)
