@@ -16,17 +16,32 @@ std::string format_signal(const DBusSignal& s)
     return ss.str();
 }
 
-void get_string_array(DBusMessage *msg, std::vector<std::string>& entries)
+
+static bool check_msg_arg(DBusMessageIter *iter, int type)
 {
-    DBusMessageIter iter, subiter;
-    dbus_message_iter_init (msg, &iter);
+    int curr_type = DBUS_TYPE_INVALID;
+    if ((curr_type = dbus_message_iter_get_arg_type (iter)) != type) {
+        std::cerr << "Argument is not of type '" << (char)type << "' != '" << (char) curr_type << "'" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool get_string_array(DBusMessageIter *iter_, std::vector<std::string>& entries)
+{
+    DBusMessageIter iter = *iter_;
+    DBusMessageIter subiter;
     int current_type = DBUS_TYPE_INVALID;
 
     current_type = dbus_message_iter_get_arg_type (&iter);
+    if (current_type == DBUS_TYPE_VARIANT) {
+        dbus_message_iter_recurse (&iter, &iter);
+        current_type = dbus_message_iter_get_arg_type (&iter);
+    }
 
     if (current_type != DBUS_TYPE_ARRAY) {
         std::cerr << "Not an array :" << (char)current_type << std::endl;
-        return;
+        return false;
     }
 
     char *val = nullptr;
@@ -40,12 +55,140 @@ void get_string_array(DBusMessage *msg, std::vector<std::string>& entries)
         }
         dbus_message_iter_next (&subiter);
     }
+    return true;
 }
 
-void parse_property_changed(DBusMessage *msg, std::string& source, std::vector<std::pair<std::string, std::string>>& entries)
+static bool get_variant_string(DBusMessageIter *iter_, std::string &val, bool key_or_value = false)
+{
+    DBusMessageIter iter = *iter_;
+    char *str = nullptr;
+    int type = dbus_message_iter_get_arg_type (&iter);
+    if (type != DBUS_TYPE_VARIANT && type != DBUS_TYPE_DICT_ENTRY)
+        return false;
+
+    dbus_message_iter_recurse (&iter, &iter);
+
+    if (key_or_value) {
+        dbus_message_iter_next (&iter);
+        if (!check_msg_arg (&iter, DBUS_TYPE_VARIANT))
+            return false;
+        dbus_message_iter_recurse (&iter, &iter);
+    }
+
+    if (!check_msg_arg (&iter, DBUS_TYPE_STRING))
+        return false;
+
+    dbus_message_iter_get_basic(&iter, &str);
+    val = str;
+
+    return true;
+}
+
+static void parse_mpris_metadata(DBusMessageIter *iter_, std::vector<std::pair<std::string, std::string>>& entries)
+{
+    DBusMessageIter subiter, iter = *iter_;
+    std::string key, val;
+
+    while (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INVALID)
+    {
+        dbus_message_iter_next (&iter);
+        //std::cerr << "\ttype: " << (char)dbus_message_iter_get_arg_type(&iter) << std::endl;
+        if (!get_variant_string(&iter, key))
+            return;
+
+        //std::cerr << "\tkey: " << key << std::endl;
+        if (key == "mpris:artUrl" || key == "xesam:title")
+        {
+            if (!get_variant_string(&iter, val, true))
+                continue;
+            //std::cerr << key << "=" << val << std::endl;
+            entries.push_back({key, val});
+        }
+        else if (key == "xesam:artist")
+        {
+            dbus_message_iter_recurse (&iter, &subiter);
+            dbus_message_iter_next (&subiter);
+            std::vector<std::string> list;
+            if (get_string_array(&subiter, list)) {
+                //std::cerr << "Artists:\n";
+                for (auto& s : list) {
+                    //std::cerr << "\t" << s << std::endl;
+                    entries.push_back({key, s});
+                }
+            }
+        }
+    }
+}
+
+static void parse_mpris_properties(DBusMessage *msg, std::string& source, std::vector<std::pair<std::string, std::string>>& entries)
+{
+    const char *val_char = nullptr;
+    DBusMessageIter iter;
+    int type, prev_type = 0;
+    std::string key, val;
+
+    std::vector<DBusMessageIter> stack;
+    stack.push_back({});
+
+    dbus_message_iter_init (msg, &stack.back());
+
+    // Should be 'org.mpris.MediaPlayer2.Player'
+    if (!check_msg_arg(&stack.back(), DBUS_TYPE_STRING))
+        return;
+
+    dbus_message_iter_get_basic(&stack.back(), &val_char);
+    source = val_char;
+
+    if (source != "org.mpris.MediaPlayer2.Player")
+        return;
+
+    dbus_message_iter_next (&stack.back());
+    //std::cerr << "type: " << (char)dbus_message_iter_get_arg_type(&stack.back()) << std::endl;
+    if (!check_msg_arg(&stack.back(), DBUS_TYPE_ARRAY))
+        return;
+
+    dbus_message_iter_recurse (&stack.back(), &iter);
+    stack.push_back(iter);
+
+    while (dbus_message_iter_get_arg_type(&stack.back()) != DBUS_TYPE_INVALID)
+    {
+        if (!get_variant_string(&stack.back(), key)) {
+            dbus_message_iter_next (&stack.back());
+            continue;
+        }
+
+        if (key == "Metadata") {
+#ifndef NDEBUG
+            std::cerr << __func__ << ": Found Metadata!" << std::endl;
+#endif
+
+            // dive into Metadata
+            dbus_message_iter_recurse (&stack.back(), &iter);
+
+            // get the array of entries
+            dbus_message_iter_next (&iter);
+            if (!check_msg_arg(&iter, DBUS_TYPE_VARIANT))
+                continue;
+            dbus_message_iter_recurse (&iter, &iter);
+
+            if (!check_msg_arg(&iter, DBUS_TYPE_ARRAY))
+                continue;
+            dbus_message_iter_recurse (&iter, &iter);
+
+            parse_mpris_metadata(&iter, entries);
+        }
+        else if (key == "PlaybackStatus") {
+        }
+
+        dbus_message_iter_next (&stack.back());
+    }
+}
+
+static void parse_property_changed(DBusMessage *msg, std::string& source, std::vector<std::pair<std::string, std::string>>& entries)
 {
     char *name = nullptr;
     int i;
+    uint64_t u64;
     double d;
 
     std::vector<DBusMessageIter> stack;
@@ -98,6 +241,12 @@ void parse_property_changed(DBusMessage *msg, std::string& source, std::vector<s
             dbus_message_iter_get_basic(&stack.back(), &i);
 #ifndef NDEBUG
             std::cout << "=" << i << std::endl;
+#endif
+        }
+        else if (type == DBUS_TYPE_UINT64) {
+            dbus_message_iter_get_basic(&stack.back(), &u64);
+#ifndef NDEBUG
+            std::cout << "=" << u64 << std::endl;
 #endif
         }
         else if (type == DBUS_TYPE_DOUBLE) {
@@ -357,7 +506,8 @@ void dbus_manager::dbus_thread(dbus_manager *pmgr)
                         std::string source;
                         std::vector<std::pair<std::string, std::string>> entries;
 
-                        parse_property_changed(msg, source, entries);
+                        //parse_property_changed(msg, source, entries);
+                        parse_mpris_properties(msg, source, entries);
 #ifndef NDEBUG
                         std::cerr << "Source: " << source << std::endl;
 #endif
